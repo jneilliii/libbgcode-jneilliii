@@ -88,3 +88,21 @@ jobs:
         repository-url: https://test.pypi.org/legacy/
         skip-existing: true
         verbose: true
+  publish-pypi:
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    needs: multi-platform-build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+    - name: Download All Artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: dist
+        merge-multiple: true
+    - run: ls -R dist
+    - uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        skip-existing: true
+        verbose: true
