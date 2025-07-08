@@ -1,3 +1,7 @@
+# pybgcode
+
+**Note:** This is a fork of [prusa3d's libbgcode](https://github.com/prusa3d/libbgcode) simply to apply some unmerged fixes and deploy pypi releases until prusa3d decides to tag and release themselves.
+
 # libbgcode
 
 Prusa Block &amp; Binary G-code reader / writer / converter
