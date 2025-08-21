@@ -20,39 +20,31 @@ jobs:
           - { plat: ubuntu-latest, arch: i686 }
           - { plat: ubuntu-24.04-arm, arch: aarch64 }
           - { plat: ubuntu-24.04-arm, arch: armv7l }
-          # ppc64le: disable as long as they are the only emulated builds, adding 1h execution time for such a rare architecture
-          #- { plat: ubuntu-latest, arch: ppc64le, qemu: true }
-          #- { plat: ubuntu-24.04-arm, arch: ppc64le, qemu: true }
-          # riscv64: manylinux does not provide images yet: https://quay.io/organization/pypa, https://github.com/pypa/manylinux/pull/1743
-          #- { plat: ubuntu-latest, arch: riscv64, qemu: true }
-          #- { plat: ubuntu-24.04-arm, arch: riscv64, qemu: true }
+          # Linux emulated builds on ARM runners are slightly faster
+          - { plat: ubuntu-24.04-arm, arch: riscv64, qemu: true }
+          - { plat: ubuntu-24.04-arm, arch: ppc64le, qemu: true }
           # s390x: Builds fail test: "FAILED tests/test_convert.py::test_main - assert <EResult.InvalidMagicNumber:..."
-          #- { plat: ubuntu-latest, arch: s390x, qemu: true }
           #- { plat: ubuntu-24.04-arm, arch: s390x, qemu: true }
-          # macOS ARM: Enforcing CMAKE_OSX_ARCHITECTURES leads to ARM deps, but then tests fail, expecting x86_64 ... leaving disabled for now
-          #- { plat: macos-latest, arch: arm64 }
-          # macOS 13 runners are x86_64
+          # macOS 13 runners are x86_64, macOS 14 and above are ARM
+          - { plat: macos-latest, arch: arm64 }
           - { plat: macos-13, arch: x86_64 }
           - { plat: windows-latest, arch: AMD64 }
-          # Windows 32-bit builds fail on 64-bit Windows hosts with "error LNK2001: unresolved external symbol" errors
+          - { plat: windows-11-arm, arch: ARM64 }
+          # Windows 32-bit builds fail on 64-bit hosts, detecting heatshrink as incompatible 64-bit dependency
           #- { plat: windows-latest, arch: x86 }
       fail-fast: false
     name: ${{ matrix.arch }} on ${{ matrix.plat }}
     runs-on: ${{ matrix.plat }}
     steps:
-    - uses: actions/checkout@v4
-    # Linux: Workaround for missing PIC error when linking heatshrink_dynalloc
-    - if: matrix.plat == 'ubuntu-latest'
-      run: sed -i '1i\set(CMAKE_POSITION_INDEPENDENT_CODE ON)' deps/heatshrink/CMakeLists.txt
-    # macOS 13: Workaround for mismatch regarding "std::uncaught_exceptions()" availability along the toolchain: https://github.com/catchorg/Catch2/issues/2779
-    - if: matrix.plat == 'macos-13'
+    - uses: actions/checkout@v5
+    # Assure PIC for all deps, otherwise it gets lost somehow for heatshrink_dynalloc, causing failures on certain Linux host and target combinations, but it is required in any case
+    # - macOS: No idea how to achieve the same with native macOS sed, hence use proper GNU sed ...
+    - if: startsWith(matrix.plat, 'macos-')
       run: |
-        # No idea how to achieve the same with native macOS sed, hence use proper GNU sed ...
         brew install gnu-sed
-        gsed -i '/CMAKE_ARGS/a\        -DCMAKE_OSX_DEPLOYMENT_TARGET=10.12' deps/Catch2/Catch2.cmake
-    # riscv64: Explicit opt-in required for now: https://cibuildwheel.pypa.io/en/stable/options/#archs
-    - if: matrix.arch == 'riscv64'
-      run: echo 'CIBW_ENABLE=cpython-experimental-riscv64' >> $GITHUB_ENV
+        gsed -i '1i\set(CMAKE_POSITION_INDEPENDENT_CODE ON)' deps/CMakeLists.txt
+    - if: "!startsWith(matrix.plat, 'macos-')"
+      run: sed -i '1i\set(CMAKE_POSITION_INDEPENDENT_CODE ON)' deps/CMakeLists.txt
     - uses: actions/setup-python@v5
       with:
         python-version: '3.x'
@@ -61,9 +53,11 @@ jobs:
       uses: docker/setup-qemu-action@v3
     - run: python -m pip install cibuildwheel
     - run: python -m cibuildwheel --archs ${{ matrix.arch }} --output-dir build
-      # macOS: Define architecture explicitly, else it compiles x86_64 deps on ARM host
+      # macOS ARM: Skip Python 3.8 wheels since official Python 3.8 installers on macOS do not support ARM, causing x86_64 builds on ARM host, or tests expect x86_64 wheels when setting CMAKE_OSX_ARCHITECTURES=arm64: https://github.com/pypa/cibuildwheel/issues/2080
+      # macOS x86_64: Set macOS 11.0 as target, as cbuildwheel defaults to macOS 10.9 for Python 3.8-3.11 wheels, which causes a mismatch regarding "std::uncaught_exceptions()" availability along the toolchain: https://github.com/catchorg/Catch2/issues/2779
       env:
-        CIBW_ENVIRONMENT_MACOS: CMAKE_OSX_ARCHITECTURES=${{ matrix.arch }}
+        CIBW_SKIP: ${{ matrix.arch == 'arm64' && 'cp38-macosx*' || '' }}
+        CIBW_ENVIRONMENT_MACOS: MACOSX_DEPLOYMENT_TARGET=11.0
     - run: ls -l build
     - uses: actions/upload-artifact@v4
       with:
