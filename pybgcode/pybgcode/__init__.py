@@ -1,6 +1,9 @@
 """Prusa Block & Binary G-code reader / writer / converter"""
 # pylint: disable=redefined-builtin
 from typing import Type, Union
+import sys
+if sys.platform != "win32":
+    from ._bgcode import memopen
 from ._bgcode import (  # type: ignore
     BlockHeader,
     CompressionType,
@@ -20,7 +23,6 @@ from ._bgcode import (  # type: ignore
     get_config,
     is_open,
     open,
-    memopen,
     read_header,
     read_next_block_header,
     rewind,
