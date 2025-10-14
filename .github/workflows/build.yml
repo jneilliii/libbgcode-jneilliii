@@ -45,7 +45,7 @@ jobs:
         gsed -i '1i\set(CMAKE_POSITION_INDEPENDENT_CODE ON)' deps/CMakeLists.txt
     - if: "!startsWith(matrix.plat, 'macos-')"
       run: sed -i '1i\set(CMAKE_POSITION_INDEPENDENT_CODE ON)' deps/CMakeLists.txt
-    - uses: actions/setup-python@v5
+    - uses: actions/setup-python@v6
       with:
         python-version: '3.x'
         check-latest: true
@@ -63,16 +63,31 @@ jobs:
       with:
         name: libbgcode-python-${{ matrix.plat }}-${{ matrix.arch }}
         path: build
+  sdist:
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.owner.login != github.event.pull_request.base.repo.owner.login
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v5
+    - uses: actions/setup-python@v6
+      with:
+        python-version: '3.x'
+        check-latest: true
+    - run: python -m pip install build
+    - run: python -m build --sdist
+    - uses: actions/upload-artifact@v4
+      with:
+        name: libbgcode-python-sdist
+        path: dist
   publish-testpypi:
     if: github.event_name == 'push' && github.ref_type == 'tag'
-    needs: multi-platform-build
+    needs: [multi-platform-build, sdist]
     runs-on: ubuntu-latest
     environment: testpypi
     permissions:
       id-token: write
     steps:
     - name: Download All Artifacts
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v5
       with:
         path: dist
         merge-multiple: true
@@ -84,14 +99,14 @@ jobs:
         verbose: true
   publish-pypi:
     if: github.event_name == 'push' && github.ref_type == 'tag'
-    needs: multi-platform-build
+    needs: [multi-platform-build, sdist]
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
       id-token: write
     steps:
     - name: Download All Artifacts
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v5
       with:
         path: dist
         merge-multiple: true
